@@ -217,7 +217,7 @@ svk_567.reset_index(inplace=True)
 # Make a copy of DataFrame and change name
 df_consumption = svk_567.copy()
 # Save DataFrame as a file
-df_consumption.to_pickle(os.path.join(path, "df_consumption"))
+df_consumption.to_pickle(const.DATA_DIR / "df_consumption"))
 
 del_list = ['svk_1', 'svk_2', 'svk_3', 'svk_4', 'svk_11', 'svk_22', 'svk_33', 
             'svk_44', 'svk_1122', 'svk_3344', 'svk_567']
@@ -438,9 +438,6 @@ pd.set_option('display.float_format', lambda x: '%.2f' % x)
 ----- Takes Data from all four price zones in Sweden
 ----- Takes data from January 2020 until December 2022
 """
-
-import os
-path = 1
 # Create empty list
 df_ = []
 # Create list to use inside "read_excel" command
