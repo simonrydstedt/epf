@@ -1,13 +1,8 @@
-# -*- coding: utf-8 -*-
-'''
-Created on Wed Sep 21 07:32:53 2022
+"""Created on Wed Sep 21 07:32:53 2022 @author: simon."""
 
-@author: simon
-'''
+"""This script is used to load the data. 
 
-
-'''
-This script is used to load the data. Three types of data or loaded and transformed. First
+Three types of data or loaded and transformed. First
 the electricity consumption data from Svenska Kraftnät (SVK) is scraped via their website. This is done
 for the whole range 2019-2022.
 
@@ -24,10 +19,10 @@ options here. Either run this whole script, which will take some time, or load s
 DataFrames via the provided DataFrames. They can be loaded with the commands below. 
 
 For example, instead of loading the consumption data the:
-df_consumption.read_pickle(f"{path}\df_consumption") command can be used, then SECTION 1 below
+df_consumption.read_pickle(const.DATA_DIR / "df_consumption") command can be used, then SECTION 1 below
 can be skipped.
-'''
-
+"""
+from pathlib import Path
 from datetime import datetime, timedelta
 from datetime import datetime as date
 import numpy as np
@@ -35,15 +30,17 @@ import pandas as pd
 import json
 from urllib.request import urlopen
 
-# Path where the excel files, and provided DataFrames are placed.
-path = r"C:\Users\simon\OneDrive\Documents\Skola\HT22\EPF_project\data"
+from src import constants as const
 
-df_consumption = pd.read_pickle(f"{path}\df_consumption")
-df_wind = pd.read_pickle(f"{path}\df_wind")
-# DataFrames containing consumption + wind + DA prices
-dff = pd.read_pickle(f"{path}\df")
-# Same as above but also containing dummies for hour, day and week
-df_dummies = pd.read_pickle(f"{path}\df_dummies")
+# # Path where the excel files, and provided DataFrames are placed.
+# path = r"C:\Users\simon\OneDrive\Documents\Skola\HT22\EPF_project\data"
+
+# df_consumption = pd.read_pickle(const.DATA_DIR / "df_consumption")
+# df_wind = pd.read_pickle(const.DATA_DIR / "df_wind")
+# # DataFrames containing consumption + wind + DA prices
+# dff = pd.read_pickle(const.DATA_DIR / "df")
+# # Same as above but also containing dummies for hour, day and week
+# df_dummies = pd.read_pickle(const.DATA_DIR / "df_dummies")
 
 
 
@@ -58,13 +55,14 @@ df_dummies = pd.read_pickle(f"{path}\df_dummies")
 
 
 
-'''
+"""
 Web-scraping module which is used to collect the data which is found on
 the https://www.svk.se/om-kraftsystemet/kontrollrummet/ website under
 "Förbrukning i Sverige". The data is collected from for different JSON
 files, one for each price zone.
-'''
+"""
 
+                
 ##################################################################
 
 # Create date range for the JSON parsing
@@ -76,6 +74,7 @@ def daterange(start_date, end_date):
         yield start_date + timedelta(n)
 # Create a parsing range which is used to perform the web-scraping     
 parsing_range_svk = []
+
 for single_date in daterange(start_date, end_date):
     single = single_date.strftime("%Y-%m-%d")
     parsing_range_svk.append(single)
@@ -119,11 +118,11 @@ del start_date
 del end_date
 del parsing_range_svk
 
-'''
+"""
 The following part under this section is used to fill daylight savings, interpolate
 some missing values, and to transform the data from four separete wide list formats
 to one long DataFrame
-'''
+"""
 
 # Filling in daylight savings and transforming data from list to df
 # not mentioned missing values due to daylight savings were interpolated
@@ -218,7 +217,7 @@ svk_567.reset_index(inplace=True)
 # Make a copy of DataFrame and change name
 df_consumption = svk_567.copy()
 # Save DataFrame as a file
-df_consumption.to_pickle(f"{path}\df_consumption")
+df_consumption.to_pickle(os.path.join(path, "df_consumption"))
 
 del_list = ['svk_1', 'svk_2', 'svk_3', 'svk_4', 'svk_11', 'svk_22', 'svk_33', 
             'svk_44', 'svk_1122', 'svk_3344', 'svk_567']
@@ -242,13 +241,13 @@ for i in del_list:
 
 
 
-'''
+"""
 The following section is used to transform the wind prognosis data that has been provided
 in excel files by SVK.
-'''
+"""
 
 
-'''
+"""
 The data for 2019 and 2020 comes in 5min intervals, so it has to be tranformed into hourly data.
 There are two separete scripts, one for 2020 and one for 2019. 2019 contains some
 missing values on 2019-02-10 which are filled using linear interpolation.
@@ -258,9 +257,9 @@ on the price zone. The second for loop is merging each dataframe with the dateti
 column. 
 
 Finally, the data is merged.
-'''
+"""
 ##################################################################################3
-df_wind = pd.read_csv(f"{path}\Vindkraftsprognos20.csv", sep=';',header=None)
+df_wind = pd.read_csv(const.DATA_DIR / "Vindkraftsprognos20.csv", sep=';',header=None)
 # Drop superflous columns
 df_wind.drop([0, 2], axis=1, inplace=True)
 # Make date column into datetime format
@@ -297,7 +296,7 @@ for p, i in zip(df_list, range(1,5)):
 #############################################################################
 
 # Same as above but for 2019
-df_wind = pd.read_csv(f"{path}\Vindkraftsprognos19.csv", sep='|',header=None)  
+df_wind = pd.read_csv(const.DATA_DIR / "Vindkraftsprognos19.csv", sep='|',header=None)  
 df_wind.drop([0, 2], axis=1, inplace=True)
 df_wind[1] = pd.to_datetime(df_wind[1])
 df_wind = df_wind.groupby([pd.Grouper(freq='H', key=1), 3]).mean().reset_index()
@@ -338,17 +337,17 @@ df_wind_1920 = pd.concat(frames)
 
 
 #######################################################################################
-'''
+"""
 Wind prognosis from SVK from 2021-01-01 to 2022-11-30 and from 2022-12-01 to 2022-12-31
 it comes in two separete files with hourly data. First 21/1-22/11 is loaded and tranformed
 then the file for december 2022
-'''
+"""
 # 21/01 - 22/11
 # Put each Price Zone in separete DataFrames (21/01 - 22/11)
-xls_1 = pd.read_excel(f"{path}\Vindkraftsprognos2101-2211.xlsx", sheet_name='SE1')
-xls_2 = pd.read_excel(f"{path}\Vindkraftsprognos2101-2211.xlsx", sheet_name='SE2')
-xls_3 = pd.read_excel(f"{path}\Vindkraftsprognos2101-2211.xlsx", sheet_name='SE3')
-xls_4 = pd.read_excel(f"{path}\Vindkraftsprognos2101-2211.xlsx", sheet_name='SE4')
+xls_1 = pd.read_excel(const.DATA_DIR / "Vindkraftsprognos2101-2211.xlsx", sheet_name='SE1')
+xls_2 = pd.read_excel(const.DATA_DIR / "Vindkraftsprognos2101-2211.xlsx", sheet_name='SE2')
+xls_3 = pd.read_excel(const.DATA_DIR / "Vindkraftsprognos2101-2211.xlsx", sheet_name='SE3')
+xls_4 = pd.read_excel(const.DATA_DIR / "Vindkraftsprognos2101-2211.xlsx", sheet_name='SE4')
 
 # Merge the Price Zones into single DataFrame
 xls_12 = pd.merge(xls_1, xls_2, on='Date and Starttime')
@@ -371,7 +370,7 @@ df_wind_2122.set_index('date', inplace=True)
 #####################################################################################
 
 # Read file for 22/12
-xls = pd.read_csv(f"{path}\Vindkraftsprognos202212.csv", sep=';')
+xls = pd.read_csv(const.DATA_DIR / "Vindkraftsprognos202212.csv", sep=';')
 xls = xls.sort_values(by=['elomrade', 'DatumId', 'Tid'])
 
 # Create list for the for loop to work
@@ -405,7 +404,7 @@ frames = [df_wind_1920, df_wind_2122]
 df_wind = pd.concat(frames)
 df_wind.reset_index(inplace=True)
 df_wind = df_wind.rename(columns={'index': 'date'})
-df_wind.to_pickle(f"{path}\df_wind")
+df_wind.to_pickle(const.DATA_DIR / "df_wind")
 
 del_list = ['date_19', 'date_20', 'df1_19', 'df1_20', 'df2_19', 'df2_20', 'df3_19',
             'df3_20','df4_19', 'df4_20', 'df_list', 'df_wind_19', 'df_wind_1920', 
@@ -434,11 +433,14 @@ for i in del_list:
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
 
 
-'''
+"""
 ----- Function to extract Day-Ahead Electricty Price Data
 ----- Takes Data from all four price zones in Sweden
 ----- Takes data from January 2020 until December 2022
-'''
+"""
+
+import os
+path = 1
 # Create empty list
 df_ = []
 # Create list to use inside "read_excel" command
@@ -446,7 +448,7 @@ data_range = (['luleur19.xls', 'luleur20.xls', 'luleur21.xls', 'luleur22.xls','s
                'stoeur19.xls', 'stoeur20.xls', 'stoeur21.xls', 'stoeur22.xls', 'maleur19.xls', 'maleur20.xls', 'maleur21.xls', 'maleur22.xls'])
 def wrangling_func():
     for i in data_range:
-        df = pd.read_excel(f"{path}\{i}".format(i))
+        df = pd.read_excel(os.path.join(path, i))
         #drop rows 0 to 3
         df.drop(df.index[[0,1,2,3]], inplace=True)
         #make first row into header
@@ -557,11 +559,11 @@ df.Price_REG4.fillna(76.60, limit=1, inplace=True)
 
 
 # Load the Consumption Prognosis from "Create_exogenous_varaibles"
-#df_consumption = pd.read_pickle(f"{path}\df_consumption")
+#df_consumption = pd.read_pickle(const.DATA_DIR / "df_consumption")
 # Merge
 df = pd.merge(df, df_consumption, on='date')
 # Load the Windpower Prognosis from "Create_exogenous_varaibles"
-df_wind = pd.read_pickle(f"{path}\df_wind")
+df_wind = pd.read_pickle(const.DATA_DIR / "df_wind")
 #df_wind.reset_index(inplace=True)
 #df_wind.drop(["index"], axis=1, inplace=True)
 # Merge
@@ -597,8 +599,8 @@ for i in del_list:
 del del_list
 del i
 
-df.to_pickle(f"{path}\df")
-df_dummies.to_pickle(f"{path}\df_dummies")
+# df.to_pickle(const.DATA_DIR / "df")
+# df_dummies.to_pickle(const.DATA_DIR / "df_dummies")
 
 
 
