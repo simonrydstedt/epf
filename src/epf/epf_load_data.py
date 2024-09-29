@@ -29,8 +29,10 @@ from urllib.request import urlopen
 
 import numpy as np
 import pandas as pd
+from zoneinfo import ZoneInfo
 
 from src import constants as const
+from src.epf import util
 
 root_dir = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(root_dir))
@@ -77,169 +79,41 @@ def read_svk_data(
 
         ##################################################################
 
-        url_list = [
-            f"https://www.svk.se/services/controlroom/v2/situation?date={date}&biddingArea={area}"
-            for area in const.BIDDING_AREAS
-            for date in parsing_range_svk
-        ]
         base_url = "https://www.svk.se/services/controlroom/v2/situation?date="
-        data_list = []
-        for area in const.BIDDING_AREAS:
-            for date in parsing_range_svk:
-                url = f"{base_url}{date}&biddingArea={area}"
-                data = json.loads(urlopen(url).read())["Data"][0]["data"]
-                consumption_data = {area: data_list.append(data["y"])}
+        consumption_data = {
+            area: {
+                date: [
+                    {
+                        "ts": dt.datetime.fromtimestamp(
+                            item["x"] / 1000, tz=ZoneInfo(key="Europe/Stockholm")
+                        ),
+                        "value": item["y"],
+                    }
+                    for item in json.loads(
+                        urlopen(f"{base_url}{date}&biddingArea={area}").read()
+                    )["Data"][0]["data"]
+                ]
+                for date in parsing_range_svk
+            }
+            for area in const.BIDDING_AREAS
+        }
+        import time
 
-        svk_2 = []
-        for i in parsing_range_svk:
-            data_json_svk = json.loads(urlopen(url.format(i)).read())
-            svk_2.append([v["y"] for v in data_json_svk["Data"][0]["data"]])
+        # Check data for missing values.
+        util.check_for_missing_data(consumption_data)
 
-        # URL to use to scrape the data from zone 2
-        url = "https://www.svk.se/services/controlroom/v2/situation?date={}&biddingArea=SE3"
+        # Add/remove DST points.
+        for dates in consumption_data.values():
+            for date, points in dates.items():
+                if len(points) > 24:
+                    util.rm_dst_point(points)
+                elif len(points) < 24:
+                    util.add_dst_point(points, shift=True)
+                else:
+                    continue
+        util.check_for_missing_data(consumption_data)
 
-        svk_3 = []
-        for i in parsing_range_svk:
-            data_json_svk = json.loads(urlopen(url.format(i)).read())
-            svk_3.append([v["y"] for v in data_json_svk["Data"][0]["data"]])
-
-        # URL to use to scrape the data from zone 4
-        url = "https://www.svk.se/services/controlroom/v2/situation?date={}&biddingArea=SE4"
-
-        svk_4 = []
-        for i in parsing_range_svk:
-            data_json_svk = json.loads(urlopen(url.format(i)).read())
-            svk_4.append([v["y"] for v in data_json_svk["Data"][0]["data"]])
-
-        del start_date
-        del end_date
-        del parsing_range_svk
-
-        """
-        The following part under this section is used to fill daylight savings, interpolate
-        some missing values, and to transform the data from four separete wide list formats
-        to one long DataFrame
-        """
-
-        # Filling in daylight savings and transforming data from list to df
-        # not mentioned missing values due to daylight savings were interpolated
-        # by SVK
-        import copy
-        from functools import reduce
-
-        # Copy the scraped data
-        svk_11 = copy.deepcopy(svk_1)
-        # Insert missing value for 29/03-20 (daylight savings)
-        svk_11[453].insert(2, 1195)
-        # Insert missing value for 28/3-21 (daylight savings)
-        svk_11[817].insert(2, 1014)
-        # Insert missing value for 27/3-22 (daylight savings)
-        svk_11[1181].insert(2, 1325)
-        # Drop extra observation 10/30-22 (daylight savings)
-        svk_11[1398].pop(2)
-        # Transforming the list from wide to long
-        svk_11 = reduce(list.__add__, svk_11)
-        # Transfroming list to DataFrame and naming column
-        svk_11 = pd.DataFrame(svk_11, columns=["SE1_C"])
-        # Insert data column
-        svk_11["date"] = pd.date_range(
-            start="01/01/2019", end="23:00 12/31/2022", periods=24 * 366 + 72 * 365
-        )
-
-        # Copy the scraped data
-        svk_22 = copy.deepcopy(svk_2)
-        # Insert missing value for 29/03-20 (daylight savings)
-        svk_22[453].insert(2, 1909)
-        # Insert missing value for 28/3-21 (daylight savings)
-        svk_22[817].insert(2, 1566)
-        # Insert missing value for 27/3-22 (daylight savings)
-        svk_22[1181].insert(2, 1624)
-        # Drop extra observation 10/30-22 (daylight savings)
-        svk_22[1398].pop(2)
-        # Transforming the list from wide to long
-        svk_22 = reduce(list.__add__, svk_22)
-        # Transfroming list to DataFrame and naming column
-        svk_22 = pd.DataFrame(svk_22, columns=["SE2_C"])
-        # Insert data column
-        svk_22["date"] = pd.date_range(
-            start="01/01/2019", end="23:00 12/31/2022", periods=24 * 366 + 72 * 365
-        )
-
-        # Copy the scraped data
-        svk_33 = copy.deepcopy(svk_3)
-        # Insert missing value for 29/03-20 (daylight savings)
-        svk_33[453].insert(2, 9221)
-        # Insert missing value for 28/3-21 (daylight savings)
-        svk_33[817].insert(2, 9046)
-        # Insert missing value for 27/3-22 (daylight savings)
-        svk_33[1181].insert(2, 9654)
-        # Drop extra observation 10/30-22 (daylight savings)
-        svk_33[1398].pop(2)
-        # Transforming the list from wide to long
-        svk_33 = reduce(list.__add__, svk_33)
-        # Transfroming list to DataFrame and naming column
-        svk_33 = pd.DataFrame(svk_33, columns=["SE3_C"])
-        # Insert data column
-        svk_33["date"] = pd.date_range(
-            start="01/01/2019", end="23:00 12/31/2022", periods=24 * 366 + 72 * 365
-        )
-
-        # Copy the scraped data
-        svk_44 = copy.deepcopy(svk_4)
-        # Insert missing value for 29/03-20 (daylight savings)
-        svk_44[453].insert(2, 2507)
-        # Insert missing value for 28/3-21 (daylight savings)
-        svk_44[817].insert(2, 2483)
-        # Insert missing value for 27/3-22 (daylight savings)
-        svk_44[1181].insert(2, 2229)
-        # Drop extra observation 10/30-22 (daylight savings)
-        svk_44[1398].pop(2)
-        # Transforming the list from wide to long
-        svk_44 = reduce(list.__add__, svk_44)
-        # Transfroming list to DataFrame and naming column
-        svk_44 = pd.DataFrame(svk_44, columns=["SE4_C"])
-        # Insert data column
-        svk_44["date"] = pd.date_range(
-            start="01/01/2019", end="23:00 12/31/2022", periods=24 * 366 + 72 * 365
-        )
-
-        # Merge the DataFrames for each zone together
-        svk_1122 = pd.merge(svk_11, svk_22, on="date")
-        svk_3344 = pd.merge(svk_33, svk_44, on="date")
-        svk_567 = pd.merge(svk_1122, svk_3344, on="date")
-        # Set date as index
-        svk_567.set_index("date", inplace=True)
-
-        # Check for nan
-        svk_567.isna().sum()
-        # Replace 0 values with nan to be able to interpolate
-        svk_567 = svk_567.replace(0, np.nan)
-        # Linear interpolation of missing values
-        svk_567 = svk_567.interpolate(method="linear")
-        # Make data a separete column to be able to merge with
-        # Electricity data later
-        svk_567.reset_index(inplace=True)
-        # Make a copy of DataFrame and change name
-        df_consumption = svk_567.copy()
-        # Save DataFrame as a file
-        df_consumption.to_pickle(os.path.join(data_path, "df_consumption"))
-        df_consumption.to_csv(os.path.join(data_path, "df_consumption_csv"))
-
-        del_list = [
-            "svk_1",
-            "svk_2",
-            "svk_3",
-            "svk_4",
-            "svk_11",
-            "svk_22",
-            "svk_33",
-            "svk_44",
-            "svk_1122",
-            "svk_3344",
-            "svk_567",
-        ]
-        for i in del_list:
-            del locals()[i]
+        time.sleep(3)
 
     ########################################## SECTION 2 - WIND ###########################################
     #######################################################################################################
@@ -265,6 +139,52 @@ def read_svk_data(
 
 def load_wind():
     ##################################################################################3
+
+    import csv
+    import datetime as dt
+    from collections import OrderedDict, defaultdict
+
+    excel_paths = [
+        const.DATA_DIR / "Vindkraftsprognos19.csv",
+        const.DATA_DIR,
+        "Vindkraftsprognos20.csv",
+    ]
+    # Initialize a nested defaultdict to hold data structured by area and date
+    data_points = defaultdict(lambda: defaultdict(lambda: OrderedDict()))
+    for excel_path in excel_paths:
+        delimiter = ";" if "20" in excel_path else "|"
+        with open(excel_path, "r") as file:
+            reader = csv.reader(file, delimiter=delimiter)
+            for row in reader:
+                # Use the appropriate column for the timestamp and value
+                timestamp = dt.datetime.strptime(
+                    row[2], "%Y-%m-%d %H:%M:%S.%f"
+                )  # This is the 5-minute interval
+                value = float(row[4])
+                area = row[3]  # This is the area key
+
+                # Round down to the hour
+                hour_key = timestamp.replace(minute=0, second=0, microsecond=0)
+
+                # Append the value to the list for the corresponding area and date
+                date_key = str(hour_key.date())  # Extract the date
+                data_points[area][date_key][hour_key] = {"ts": hour_key, "value": value}
+
+        # Convert to OrderedDict for sorting by area and date
+        result = OrderedDict()
+        for area, dates in data_points.items():
+            result[area] = OrderedDict(sorted(dates.items()))  # Sort by date
+            for date in list(
+                result[area].keys()
+            ):  # Use list to avoid modifying while iterating
+                entries = list(result[area][date].values())
+                if len(entries) < 2:  # Drop the date if it has fewer than 2 entries
+                    del result[area][date]
+                else:
+                    result[area][date] = entries  # Convert to list of values
+
+    util.check_for_missing_data(result)
+
     df_wind = pd.read_csv(
         const.DATA_DIR / "Vindkraftsprognos20.csv", sep=";", header=None
     )
@@ -277,7 +197,7 @@ def load_wind():
     # set datetime column to index
     df_wind.set_index(1, inplace=True)
     # Sort data by column 3 (Price zone)
-    df_wind = df_wind.sort_values(by=[3])
+    df_wind = df_wind.sort_values(by=[2])
     # Make some lists for the for loop
     df_list = ("df1_20", "df2_20", "df3_20", "df4_20")
     start_20 = [0, 8783, 17566, 26349]
